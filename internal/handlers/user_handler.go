@@ -1,20 +1,16 @@
 package handlers
 
 import (
+	"auto-system/internal/dto"
 	"auto-system/internal/models"
+	"auto-system/pkg/helpers"
 	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type SignUpRequest struct{
-	Email 	 string 	`json:"email" binding:"required,email"`
-	Name  	 string		`json:"name"  binding:"required,min=2,max=100"`
-	Password string		`json:"password" binding:"required,min=8"`
-}
 
 type UserHandler struct{
 	DB *gorm.DB
@@ -26,24 +22,23 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 
 func (h *UserHandler) SingUp(c *gin.Context){
-	var req SignUpRequest
+	var req dto.SignUpRequest	
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(200, gin.H{"error": err.Error()})
 		return
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+	hash, err := helpers.HashPassword(req.Password)
+	if err != nil{
+		helpers.InternalError(c)
 		return
 	}
-	
-	user := models.User{Name: req.Name, Email:req.Email,Password:string(hash)}
+	user := models.User{Name: req.Name, Email: req.Email,Password: hash}
 	if err := h.DB.Create(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
+		if errors.Is(err, gorm.ErrDuplicatedKey){
+			helpers.Error(c ,http.StatusConflict, "email already exists")
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error":"internal error"})
+		helpers.InternalError(c)
 		return
 	}
 	c.JSON(http.StatusCreated, user)
